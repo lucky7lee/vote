@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>설문조사 & 실시간 투표</title>
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- GunDB for Real-time Cross-device Sync without API Keys -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <!-- LZ-String for compact URL encoding -->
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <main class="app-container">
+    <!-- VIEW 1: HOME (오직 "작성하기" 메뉴 아이콘 하나만 표시) -->
+    <section id="view-home" class="view active">
+      <div class="home-center">
+        <button id="btn-start-create" class="create-menu-icon-btn" type="button" aria-label="작성하기">
+          <div class="icon-circle">
+            <i data-lucide="clipboard-pen" class="main-icon"></i>
+          </div>
+          <span class="menu-label">작성하기</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- PASSWORD MODAL ("77777" 입력) -->
+    <div id="modal-password" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-badge">
+            <i data-lucide="lock" class="badge-icon"></i>
+          </div>
+          <h2 id="modal-title">암호를 입력해 주세요</h2>
+          <p class="modal-desc">설문조사 및 투표를 작성하려면 관리자 암호가 필요합니다.</p>
+        </div>
+        <form id="form-password" autocomplete="off">
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="input-password"
+              inputmode="numeric"
+              placeholder="암호 입력"
+              maxlength="10"
+              required
+            />
+          </div>
+          <p id="password-error" class="error-msg hidden">암호가 올바르지 않습니다. 다시 확인해 주세요.</p>
+          <div class="modal-actions">
+            <button type="button" id="btn-cancel-pw" class="btn btn-secondary">취소</button>
+            <button type="submit" class="btn btn-primary">확인</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- VIEW 2: BUILDER (설문조사 및 투표 작성 화면) -->
+    <section id="view-builder" class="view hidden">
+      <header class="section-header">
+        <div class="header-top">
+          <span class="step-badge">설문/투표 제작</span>
+          <button type="button" id="btn-back-home" class="icon-ghost-btn" title="처음으로">
+            <i data-lucide="home"></i>
+          </button>
+        </div>
+        <h1>설문조사 및 투표 작성</h1>
+        <p class="sub-text">우측의 <strong>+</strong> 버튼을 눌러 질문이나 보기를 자유롭게 추가하세요.</p>
+      </header>
+
+      <form id="form-builder" autocomplete="off">
+        <div id="questions-container" class="questions-list">
+          <!-- JS로 첫 번째 질문 + 첫 번째 보기 렌더링 -->
+        </div>
+
+        <div class="bottom-submit-bar">
+          <button type="submit" id="btn-finish-create" class="btn btn-primary btn-large">
+            <i data-lucide="check-circle-2"></i>
+            <span>작성완료</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- VIEW 3: SHARE LINK (작성완료 후 생성된 링크 화면) -->
+    <section id="view-share" class="view hidden">
+      <div class="card share-card">
+        <div class="success-icon-wrap">
+          <i data-lucide="sparkles" class="success-icon"></i>
+        </div>
+        <h1>설문조사 링크가 생성되었습니다!</h1>
+        <p class="sub-text">아래 링크를 복사하여 참여자들에게 공유하세요. 누구나 링크를 클릭해 투표할 수 있습니다.</p>
+
+        <div class="link-box-group">
+          <label for="input-share-url" class="field-label">생성된 온라인 투표 사이트 주소 (GitHub 주소 연동)</label>
+          <div class="url-copy-row">
+            <input type="text" id="input-share-url" readonly />
+            <button type="button" id="btn-copy-url" class="btn btn-primary">
+              <i data-lucide="copy"></i>
+              <span>링크 복사</span>
+            </button>
+          </div>
+          <p id="copy-toast" class="toast-inline hidden">클립보드에 링크가 복사되었습니다!</p>
+        </div>
+
+        <!-- 로컬/파일 환경에서 열었을 때 GitHub Pages 도메인 설정 도우미 -->
+        <div id="github-base-config" class="github-config-box">
+          <div class="config-header">
+            <i data-lucide="github"></i>
+            <span>GitHub Pages 기본 주소 설정</span>
+          </div>
+          <p class="config-help">
+            GitHub에 업로드한 뒤 생성되는 주소(예: <code>https://아이디.github.io/저장소명/</code>)를 입력하면, 작성완료 시 해당 GitHub 주소로 투표 링크가 만들어집니다. (GitHub Pages 사이트에서 직접 접속 시에는 자동 적용됩니다)
+          </p>
+          <div class="url-copy-row">
+            <input
+              type="url"
+              id="input-github-base"
+              placeholder="https://아이디.github.io/vote/"
+            />
+            <button type="button" id="btn-apply-github-base" class="btn btn-secondary">
+              적용
+            </button>
+          </div>
+        </div>
+
+        <div class="share-actions">
+          <button type="button" id="btn-go-vote-now" class="btn btn-primary btn-large">
+            <i data-lucide="vote"></i>
+            <span>생성된 투표 화면 바로 열기</span>
+          </button>
+          <button type="button" id="btn-go-results-now" class="btn btn-outline btn-large">
+            <i data-lucide="bar-chart-3"></i>
+            <span>실시간 투표 결과 바로 보기</span>
+          </button>
+          <button type="button" id="btn-new-poll" class="btn btn-ghost">
+            새 설문 다시 작성하기
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: VOTE (일반 사용자 투표 참여 화면) -->
+    <section id="view-vote" class="view hidden">
+      <header class="section-header">
+        <div class="header-top">
+          <span class="step-badge live-badge"><span class="pulse-dot"></span> 투표를 진행해 주세요</span>
+          <button type="button" id="btn-vote-to-home" class="icon-ghost-btn" title="작성 메뉴로">
+            <i data-lucide="clipboard-pen"></i>
+          </button>
+        </div>
+        <h1 id="vote-title">설문조사 및 투표</h1>
+        <p class="sub-text">각 질문의 보기를 선택한 후 아래의 투표 완료 또는 결과보기 버튼을 눌러주세요.</p>
+      </header>
+
+      <form id="form-vote">
+        <div id="vote-questions-container" class="questions-list">
+          <!-- 투표 질문 및 보기 렌더링 -->
+        </div>
+
+        <p id="vote-alert" class="alert-banner hidden"></p>
+
+        <div class="bottom-submit-bar dual-actions">
+          <button type="submit" id="btn-submit-vote" class="btn btn-primary btn-large">
+            <i data-lucide="check"></i>
+            <span>투표하기</span>
+          </button>
+          <button type="button" id="btn-show-results" class="btn btn-secondary btn-large">
+            <i data-lucide="pie-chart"></i>
+            <span>결과보기</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- VIEW 5: RESULTS (상세 투표 결과 - 투표수, %, 그래프) -->
+    <section id="view-results" class="view hidden">
+      <header class="section-header">
+        <div class="header-top">
+          <span class="step-badge result-badge"><span class="pulse-dot"></span> 실시간 집계 결과</span>
+          <div class="header-right-btns">
+            <button type="button" id="btn-share-from-results" class="icon-ghost-btn" title="링크 공유">
+              <i data-lucide="share-2"></i>
+            </button>
+            <button type="button" id="btn-results-to-home" class="icon-ghost-btn" title="처음으로">
+              <i data-lucide="home"></i>
+            </button>
+          </div>
+        </div>
+        <h1>상세 투표 결과</h1>
+        <p class="sub-text" id="results-summary-text">실시간으로 모든 참여자의 투표 현황이 반영됩니다.</p>
+      </header>
+
+      <div id="results-questions-container" class="questions-list">
+        <!-- 각 질문별 투표수, %, 막대 그래프, 최다 득표 뱃지 등 렌더링 -->
+      </div>
+
+      <div class="bottom-submit-bar dual-actions">
+        <button type="button" id="btn-back-to-vote" class="btn btn-secondary btn-large">
+          <i data-lucide="arrow-left"></i>
+          <span>투표 화면으로</span>
+        </button>
+        <button type="button" id="btn-copy-result-link" class="btn btn-primary btn-large">
+          <i data-lucide="link"></i>
+          <span>투표 링크 복사</span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
